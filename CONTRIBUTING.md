@@ -68,7 +68,6 @@ Before contributing, ensure you have:
 5. **Verify the setup**:
     ```bash
     go build
-    go test ./...
     ```
 
 ## 🏗️ Project Structure
@@ -238,35 +237,24 @@ git checkout -b fix/issue-description
 ### 2. **Make Your Changes**
 
 -   Follow the coding standards above
--   Add tests for new functionality
 -   Update documentation as needed
--   Test your changes thoroughly
+-   Test your changes thoroughly with real database scenarios
 
-### 3. **Testing Guidelines**
+### 3. **Manual Testing**
 
-#### Manual Testing
-
-Create a test `.env` file and verify:
+Since automated tests are not yet implemented, please thoroughly test your changes:
 
 ```bash
-# Test different scenarios
+# Test different scenarios manually
 cp .env.sample .env.test
 # Edit .env.test with test credentials
 go run main.go
-```
 
-#### Automated Testing
-
-```bash
-# Run all tests
-go test ./...
-
-# Run tests with coverage
-go test -cover ./...
-
-# Run specific package tests
-go test ./utils
-go test ./migrator
+# Test various configurations:
+# - Docker to Docker migrations
+# - Host to Docker migrations
+# - Different SSL modes
+# - Error scenarios
 ```
 
 ### 4. **Commit Messages**
@@ -311,9 +299,8 @@ type(scope): description
 
 -   [ ] Code follows the style guidelines
 -   [ ] Self-review of your code completed
--   [ ] Tests added for new functionality
 -   [ ] Documentation updated if needed
--   [ ] All tests pass locally
+-   [ ] Manual testing completed across different scenarios
 
 ### 2. **Pull Request Template**
 
@@ -334,16 +321,15 @@ Brief description of changes made.
 ## Testing
 
 -   [ ] Manual testing completed
--   [ ] Automated tests pass
 -   [ ] Tested with Docker configuration
 -   [ ] Tested with host-only configuration
+-   [ ] Tested with different database scenarios
 
 ## Checklist
 
 -   [ ] Code follows project style guidelines
 -   [ ] Self-review completed
 -   [ ] Documentation updated
--   [ ] Tests added/updated
 ```
 
 ### 3. **Review Process**
