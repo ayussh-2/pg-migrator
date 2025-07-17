@@ -1,1 +1,5 @@
 .env
+
+pg-migrator.exe
+pg-migrator
+host_migration_*

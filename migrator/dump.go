@@ -16,11 +16,13 @@ func (m *Migrator) createDump() error {
 	var cmd *exec.Cmd
 	var stderr bytes.Buffer
 
-	if m.config.DockerContainerName != "" {
-		PrintColored("yellow", "Creating database dump via Docker...")
-		// In Docker mode, we stream the output of pg_dump to a file on the host.
+	if m.config.UseDockerForTools && m.config.HostDockerContainer != "" {
+		PrintColored("yellow", "Creating database dump via Docker container with network access...")
+		// Run pg_dump inside Docker container with host network access
 		args := []string{
-			"exec", m.config.DockerContainerName,
+			"exec",
+			"-e", fmt.Sprintf("PGPASSWORD=%s", m.config.HostPassword), // Pass password as environment variable
+			m.config.HostDockerContainer,
 			"pg_dump",
 			"-h", m.config.HostHost,
 			"-p", m.config.HostPort,
@@ -33,8 +35,8 @@ func (m *Migrator) createDump() error {
 			"--if-exists",
 		}
 		cmd = exec.Command("docker", args...)
-		cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", m.config.HostPassword))
 
+		// Create dump file on host and redirect Docker output to it
 		dumpFile, err := os.Create(m.dumpFile)
 		if err != nil {
 			return fmt.Errorf("failed to create dump file on host: %v", err)
@@ -44,8 +46,8 @@ func (m *Migrator) createDump() error {
 		cmd.Stderr = &stderr
 
 	} else {
-		PrintColored("yellow", "Creating database dump from HostDB...")
-		// In host mode, pg_dump writes directly to the file.
+		PrintColored("yellow", "Creating database dump from host machine...")
+		// Run pg_dump directly on host (for external DBs like Neon)
 		args := []string{
 			"-h", m.config.HostHost,
 			"-p", m.config.HostPort,
@@ -75,25 +77,26 @@ func (m *Migrator) createDump() error {
 	return nil
 }
 
-// restoreDump restores a database dump, running psql on the host or in Docker.
+// restoreDump restores a database dump to the target database
 func (m *Migrator) restoreDump() error {
 	var cmd *exec.Cmd
 	var stderr bytes.Buffer
 
-	if m.config.DockerContainerName != "" {
-		PrintColored("yellow", "Restoring dump to target via Docker...")
-		// In Docker mode, we stream the dump file from the host to psql's stdin.
+	if m.config.TargetDockerContainer != "" {
+		PrintColored("yellow", "Restoring dump to target via Docker container...")
+		// Run psql inside the target Docker container
 		args := []string{
-			"exec", "-i", m.config.DockerContainerName,
+			"exec", "-i",
+			"-e", fmt.Sprintf("PGPASSWORD=%s", m.config.TargetPassword), // Pass password as environment variable
+			m.config.TargetDockerContainer,
 			"psql",
 			"-h", m.config.TargetHost,
 			"-p", m.config.TargetPort,
 			"-U", m.config.TargetUser,
 			"-d", m.config.TargetDB,
-			"--verbose",
+			"-v", "ON_ERROR_STOP=1", // Stop on first error
 		}
 		cmd = exec.Command("docker", args...)
-		cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", m.config.TargetPassword))
 
 		// Redirect dump file content to stdin
 		dumpFile, err := os.Open(m.dumpFile)
@@ -105,15 +108,15 @@ func (m *Migrator) restoreDump() error {
 		cmd.Stderr = &stderr
 
 	} else {
-		PrintColored("yellow", "Restoring dump to target PostgreSQL...")
-		// In host mode, psql reads directly from the file.
+		PrintColored("yellow", "Restoring dump to target database...")
+		// Run psql directly on host
 		args := []string{
 			"-h", m.config.TargetHost,
 			"-p", m.config.TargetPort,
 			"-U", m.config.TargetUser,
 			"-d", m.config.TargetDB,
 			"-f", m.dumpFile,
-			"--verbose",
+			"-v", "ON_ERROR_STOP=1", // Stop on first error
 		}
 		cmd = exec.Command("psql", args...)
 		cmd.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", m.config.TargetPassword))

@@ -15,6 +15,7 @@ type Config struct {
 	HostUser     string
 	HostPassword string
 	HostSSLMode  string
+	HostDockerContainer string // Docker container for host DB operations
 
 	TargetHost     string
 	TargetPort     string
@@ -22,8 +23,10 @@ type Config struct {
 	TargetUser     string
 	TargetPassword string
 	TargetSSLMode  string
+	TargetDockerContainer string // Docker container for target DB operations
 	
-	DockerContainerName string
+	// New field to control tool execution strategy
+	UseDockerForTools bool // Whether to use Docker containers for pg_dump/psql
 }
 
 func LoadConfig() (Config, error) {
@@ -39,6 +42,7 @@ func LoadConfig() (Config, error) {
 		HostUser:     os.Getenv("HOST_USER"),
 		HostPassword: os.Getenv("HOST_PASSWORD"),
 		HostSSLMode:  os.Getenv("HOST_SSLMODE"),
+		HostDockerContainer: os.Getenv("HOST_DOCKER_CONTAINER"),
 
 		// Target PostgreSQL configuration
 		TargetHost:     os.Getenv("TARGET_HOST"),
@@ -47,9 +51,17 @@ func LoadConfig() (Config, error) {
 		TargetUser:     os.Getenv("TARGET_USER"),
 		TargetPassword: os.Getenv("TARGET_PASSWORD"),
 		TargetSSLMode:  os.Getenv("TARGET_SSLMODE"),
+		TargetDockerContainer: os.Getenv("TARGET_DOCKER_CONTAINER"),
+		
+		// Check if we should use Docker for tools
+		UseDockerForTools: os.Getenv("USE_DOCKER_FOR_TOOLS") == "true",
+	}
 
-		// Docker configuration
-		DockerContainerName: os.Getenv("DOCKER_CONTAINER_NAME"),
+	// Auto-detect strategy: if target container is specified and no host container, use Docker for tools
+	if config.TargetDockerContainer != "" && config.HostDockerContainer == "" {
+		config.UseDockerForTools = true
+		// Use target container for running pg_dump (with network access to external host)
+		config.HostDockerContainer = config.TargetDockerContainer
 	}
 
 	if config.HostPort == "" {
@@ -92,7 +104,6 @@ func LoadConfig() (Config, error) {
 	if config.TargetPassword == "" {
 		missingVars = append(missingVars, "TARGET_PASSWORD")
 	}
-
 
 	if len(missingVars) > 0 {
 		return Config{}, fmt.Errorf("error: missing required environment variables: %s", strings.Join(missingVars, ", "))

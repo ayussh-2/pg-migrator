@@ -17,32 +17,65 @@ func PrintColored(color, message string) {
 }
 
 // checkPGTools checks if pg_dump and psql are available, either on the host
-// or within the specified Docker container.
+// or within the specified Docker containers.
 func (m *Migrator) checkPGTools() error {
-	if m.config.DockerContainerName != "" {
-		PrintColored("yellow", "Checking for Docker and PostgreSQL tools in container...")
+	// Check if Docker is available if any container is specified
+	if m.config.HostDockerContainer != "" || m.config.TargetDockerContainer != "" {
+		PrintColored("yellow", "Checking for Docker...")
 		if _, err := exec.LookPath("docker"); err != nil {
 			return fmt.Errorf("docker command not found. Please install Docker or run without Docker mode")
 		}
-		tools := []string{"pg_dump", "psql"}
-		for _, tool := range tools {
-			cmd := exec.Command("docker", "exec", m.config.DockerContainerName, "which", tool)
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("%s not found in container %s. Please ensure PostgreSQL client tools are installed in the container", tool, m.config.DockerContainerName)
-			}
-		}
-		PrintColored("green", "Docker and PostgreSQL tools found in container.")
-		return nil
 	}
 
-	// Host mode: check for tools on the host machine
-	PrintColored("yellow", "Checking PostgreSQL tools on host...")
-	tools := []string{"pg_dump", "psql"}
-	for _, tool := range tools {
-		if _, err := exec.LookPath(tool); err != nil {
-			return fmt.Errorf("%s not found. Please install PostgreSQL client tools", tool)
+	// Check pg_dump availability
+	if m.config.UseDockerForTools && m.config.HostDockerContainer != "" {
+		PrintColored("yellow", "Checking pg_dump in Docker container...")
+		cmd := exec.Command("docker", "exec", m.config.HostDockerContainer, "which", "pg_dump")
+		if err := cmd.Run(); err != nil {
+			PrintColored("yellow", "pg_dump not found in container, falling back to host...")
+			// Fallback to host
+			if _, err := exec.LookPath("pg_dump"); err != nil {
+				return fmt.Errorf("pg_dump not found in container or on host. Please install PostgreSQL client tools")
+			}
+			m.config.UseDockerForTools = false
+		} else {
+			PrintColored("green", "pg_dump found in Docker container.")
+		}
+	} else {
+		PrintColored("yellow", "Checking pg_dump on host machine...")
+		if _, err := exec.LookPath("pg_dump"); err != nil {
+			if m.config.TargetDockerContainer != "" {
+				PrintColored("yellow", "pg_dump not found on host, trying Docker container...")
+				cmd := exec.Command("docker", "exec", m.config.TargetDockerContainer, "which", "pg_dump")
+				if err := cmd.Run(); err != nil {
+					return fmt.Errorf("pg_dump not found on host or in container. Please install PostgreSQL client tools")
+				}
+				m.config.UseDockerForTools = true
+				m.config.HostDockerContainer = m.config.TargetDockerContainer
+				PrintColored("green", "pg_dump found in Docker container, using Docker mode.")
+			} else {
+				return fmt.Errorf("pg_dump not found on host. Please install PostgreSQL client tools")
+			}
+		} else {
+			PrintColored("green", "pg_dump found on host machine.")
 		}
 	}
-	PrintColored("green", "PostgreSQL tools found on host.")
+
+	// Check psql availability for target
+	if m.config.TargetDockerContainer != "" {
+		PrintColored("yellow", "Checking psql in target Docker container...")
+		cmd := exec.Command("docker", "exec", m.config.TargetDockerContainer, "which", "psql")
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("psql not found in target container %s. Please ensure PostgreSQL client tools are installed", m.config.TargetDockerContainer)
+		}
+		PrintColored("green", "psql found in target container.")
+	} else {
+		PrintColored("yellow", "Checking psql on host machine...")
+		if _, err := exec.LookPath("psql"); err != nil {
+			return fmt.Errorf("psql not found on host. Please install PostgreSQL client tools")
+		}
+		PrintColored("green", "psql found on host machine.")
+	}
+
 	return nil
 }
