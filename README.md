@@ -61,7 +61,7 @@ The application is written in Go and leverages the following:
 1. Clone the repository:
 
     ```bash
-    git clone <repository-url>
+    git clone <your-forked-repository-url>
     cd pg-migrator
     ```
 
